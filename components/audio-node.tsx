@@ -1,9 +1,9 @@
 "use client"
 
 import type React from "react"
-
+import { Mic, Speaker, Clock, Waves, Activity, Filter, BarChart2, Sliders } from "lucide-react"
 import type { AudioNode } from "./audio-node-provider"
-import { Mic, Speaker, Clock, Waves, Activity, Filter } from "lucide-react"
+import { Visualizer } from "./visualizer"
 
 interface AudioNodeProps {
   node: AudioNode
@@ -34,6 +34,10 @@ export function AudioNodeComponent({
         return <Activity className="h-5 w-5" />
       case "filter":
         return <Filter className="h-5 w-5" />
+      case "visualizer":
+        return <BarChart2 className="h-5 w-5" />
+      case "eq":
+        return <Sliders className="h-5 w-5" />
       default:
         return null
     }
@@ -53,6 +57,10 @@ export function AudioNodeComponent({
         return "bg-red-100 border-red-300 dark:bg-red-950 dark:border-red-800"
       case "filter":
         return "bg-orange-100 border-orange-300 dark:bg-orange-950 dark:border-orange-800"
+      case "visualizer":
+        return "bg-indigo-100 border-indigo-300 dark:bg-indigo-950 dark:border-indigo-800"
+      case "eq":
+        return "bg-teal-100 border-teal-300 dark:bg-teal-950 dark:border-teal-800"
       default:
         return "bg-gray-100 border-gray-300 dark:bg-gray-800 dark:border-gray-700"
     }
@@ -72,6 +80,10 @@ export function AudioNodeComponent({
         return "Compressor"
       case "filter":
         return "Filter"
+      case "visualizer":
+        return "Visualizer"
+      case "eq":
+        return "Parametric EQ"
       default:
         return "Node"
     }
@@ -115,6 +127,13 @@ export function AudioNodeComponent({
           </div>
         )}
 
+        {/* Visualization canvas for visualizer node */}
+        {node.type === "visualizer" && (
+          <div className="my-2 h-20 w-full">
+            <Visualizer node={node} />
+          </div>
+        )}
+
         {/* Output connectors */}
         {node.outputs.length > 0 && (
           <div className="flex items-center justify-end mt-2">
@@ -136,4 +155,3 @@ export function AudioNodeComponent({
     </div>
   )
 }
-

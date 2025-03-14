@@ -1,78 +1,96 @@
 "use client"
 
-import { useAudioNodes } from "./audio-node-provider"
-import { Button } from "@/components/ui/button"
-import { Clock, Waves, Activity, Filter, PanelLeft } from "lucide-react"
 import { useState } from "react"
+import { Clock, Waves, Activity, Filter, PanelLeft, BarChart2, Sliders } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { useAudioNodes } from "./audio-node-provider"
 
 export function Sidebar() {
   const { addNode } = useAudioNodes()
   const [isCollapsed, setIsCollapsed] = useState(false)
 
-  const handleAddNode = (type: "delay" | "reverb" | "compressor" | "filter") => {
+  const handleAddNode = (type: "delay" | "reverb" | "compressor" | "filter" | "visualizer" | "eq") => {
     // Add node at a random position in the visible area
     const x = Math.random() * 500 + 200
     const y = Math.random() * 300 + 100
     addNode(type, { x, y })
   }
 
+  const handleDragStart = (e: React.DragEvent, type: "delay" | "reverb" | "compressor" | "filter" | "visualizer" | "eq") => {
+    e.dataTransfer.setData("nodeType", type)
+    // Create a ghost image for dragging
+    const ghostElement = document.createElement("div")
+    ghostElement.classList.add("w-20", "h-10", "bg-indigo-500", "rounded", "flex", "items-center", "justify-center", "text-white")
+    ghostElement.innerText = type.charAt(0).toUpperCase() + type.slice(1)
+    document.body.appendChild(ghostElement)
+    e.dataTransfer.setDragImage(ghostElement, 40, 20)
+    
+    // Schedule removal of the ghost element
+    setTimeout(() => {
+      document.body.removeChild(ghostElement)
+    }, 0)
+  }
+
+  const nodeTypes = [
+    { type: "delay", icon: Clock, label: "Delay" },
+    { type: "reverb", icon: Waves, label: "Reverb" },
+    { type: "compressor", icon: Activity, label: "Compressor" },
+    { type: "filter", icon: Filter, label: "Filter" },
+    { type: "visualizer", icon: BarChart2, label: "Visualizer" },
+    { type: "eq", icon: Sliders, label: "Parametric EQ" },
+  ] as const
+
   return (
-    <div className={`border-r bg-background transition-all duration-300 ${isCollapsed ? "w-12" : "w-64"}`}>
+    <div className={cn(
+      "border-r bg-background transition-all duration-300",
+      isCollapsed ? "w-12" : "w-64"
+    )}>
       <div className="flex items-center justify-between p-2 border-b">
-        <h2 className={`font-semibold ${isCollapsed ? "hidden" : "block"}`}>Audio Nodes</h2>
+        <h2 className={isCollapsed ? "hidden" : "block font-semibold"}>Audio Nodes</h2>
         <Button
           variant="ghost"
           size="icon"
           onClick={() => setIsCollapsed(!isCollapsed)}
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <PanelLeft className={`h-5 w-5 transition-transform ${isCollapsed ? "rotate-180" : ""}`} />
+          <PanelLeft className={cn(
+            "h-5 w-5 transition-transform",
+            isCollapsed ? "rotate-180" : ""
+          )} />
         </Button>
       </div>
 
       <div className="p-2">
-        <div className={`space-y-2 ${isCollapsed ? "flex flex-col items-center" : ""}`}>
+        <div className={cn(
+          "space-y-2",
+          isCollapsed ? "flex flex-col items-center" : ""
+        )}>
           {!isCollapsed && (
             <p className="text-sm text-muted-foreground mb-4">
               Drag and drop nodes to create your audio processing chain.
             </p>
           )}
 
-          <Button
-            variant="outline"
-            className={`w-full justify-start ${isCollapsed ? "px-0 justify-center" : ""}`}
-            onClick={() => handleAddNode("delay")}
-          >
-            <Clock className="h-5 w-5 mr-2" />
-            {!isCollapsed && <span>Delay</span>}
-          </Button>
-
-          <Button
-            variant="outline"
-            className={`w-full justify-start ${isCollapsed ? "px-0 justify-center" : ""}`}
-            onClick={() => handleAddNode("reverb")}
-          >
-            <Waves className="h-5 w-5 mr-2" />
-            {!isCollapsed && <span>Reverb</span>}
-          </Button>
-
-          <Button
-            variant="outline"
-            className={`w-full justify-start ${isCollapsed ? "px-0 justify-center" : ""}`}
-            onClick={() => handleAddNode("compressor")}
-          >
-            <Activity className="h-5 w-5 mr-2" />
-            {!isCollapsed && <span>Compressor</span>}
-          </Button>
-
-          <Button
-            variant="outline"
-            className={`w-full justify-start ${isCollapsed ? "px-0 justify-center" : ""}`}
-            onClick={() => handleAddNode("filter")}
-          >
-            <Filter className="h-5 w-5 mr-2" />
-            {!isCollapsed && <span>Filter</span>}
-          </Button>
+          {nodeTypes.map(({ type, icon: Icon, label }) => (
+            <Button
+              key={type}
+              variant="outline"
+              className={cn(
+                "w-full justify-start",
+                isCollapsed ? "px-0 justify-center" : ""
+              )}
+              onClick={() => handleAddNode(type)}
+              draggable
+              onDragStart={(e) => handleDragStart(e, type)}
+            >
+              <Icon className={cn(
+                "h-5 w-5",
+                isCollapsed ? "mx-2" : "mr-2"
+              )} />
+              {!isCollapsed && <span>{label}</span>}
+            </Button>
+          ))}
         </div>
 
         {!isCollapsed && (
@@ -80,7 +98,8 @@ export function Sidebar() {
             <h3 className="font-medium text-sm mb-2">Instructions</h3>
             <ul className="text-xs space-y-1 text-muted-foreground">
               <li>• Click a node to add it to the canvas</li>
-              <li>• Drag nodes to position them</li>
+              <li>• Drag nodes from sidebar to position them</li>
+              <li>• Right-click on canvas to add nodes</li>
               <li>• Connect outputs to inputs</li>
               <li>• Select a node to edit parameters</li>
               <li>• Press Delete to remove a node</li>
@@ -91,4 +110,3 @@ export function Sidebar() {
     </div>
   )
 }
-

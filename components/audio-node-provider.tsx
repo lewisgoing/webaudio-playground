@@ -3,7 +3,7 @@
 import type React from "react"
 import { createContext, useContext, useEffect, useState, useRef } from "react"
 
-export type NodeType = "source" | "destination" | "delay" | "reverb" | "compressor" | "filter"
+export type NodeType = "source" | "destination" | "delay" | "reverb" | "compressor" | "filter" | "visualizer" | "eq"
 
 export interface AudioNode {
   id: string
@@ -121,6 +121,39 @@ export function AudioNodeProvider({ children }: { children: React.ReactNode }) {
           inputs: ["input"],
           outputs: ["output"],
           params: { frequency: 1000, Q: 1, gain: 0 },
+        }
+        break
+      case "visualizer":
+        newNode = {
+          id,
+          type,
+          position,
+          inputs: ["input"],
+          outputs: ["output"],
+          params: { 
+            fftSize: 2048, 
+            minDecibels: -100, 
+            maxDecibels: -30,
+            smoothingTimeConstant: 0.8
+          },
+        }
+        break
+      case "eq":
+        newNode = {
+          id,
+          type,
+          position,
+          inputs: ["input"],
+          outputs: ["output"],
+          params: { 
+            lowFreq: 100, 
+            lowGain: 0,
+            midFreq: 1000, 
+            midQ: 1, 
+            midGain: 0,
+            highFreq: 5000, 
+            highGain: 0 
+          },
         }
         break
       default:
@@ -255,4 +288,3 @@ export function useAudioNodes() {
   }
   return context
 }
-
