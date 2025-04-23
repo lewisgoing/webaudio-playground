@@ -129,10 +129,6 @@ export function AudioNodeComponent({
                     e.preventDefault();
                     onEndConnecting(node.id, input, e);
                   }}
-                  onMouseDown={(e) => {
-                    // Prevent node dragging when clicking on connector
-                    e.stopPropagation();
-                  }}
                   role="button"
                   tabIndex={0}
                   aria-label={`${getNodeTitle()} input connector`}
@@ -192,10 +188,6 @@ export function AudioNodeComponent({
                     e.stopPropagation();
                     e.preventDefault();
                     onStartConnecting(node.id, output, e);
-                  }}
-                  onMouseDown={(e) => {
-                    // Prevent node dragging when clicking on connector
-                    e.stopPropagation();
                   }}
                   role="button"
                   tabIndex={0}
