@@ -37,6 +37,8 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null)
   
   const nodeTypes: { type: NodeType; icon: React.FC<{ className?: string }>; label: string }[] = [
+    { type: "oscillator", icon: Clock, label: "Oscillator" },
+    { type: "mp3input", icon: Waves, label: "MP3 Input" },
     { type: "delay", icon: Clock, label: "Delay" },
     { type: "reverb", icon: Waves, label: "Reverb" },
     { type: "compressor", icon: Activity, label: "Compressor" },

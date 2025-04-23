@@ -10,14 +10,14 @@ export function Sidebar() {
   const { addNode } = useAudioNodes()
   const [isCollapsed, setIsCollapsed] = useState(false)
 
-  const handleAddNode = (type: "delay" | "reverb" | "compressor" | "filter" | "visualizer" | "eq") => {
+  const handleAddNode = (type: import("./audio-node-provider").NodeType) => {
     // Add node at a random position in the visible area
     const x = Math.random() * 500 + 200
     const y = Math.random() * 300 + 100
     addNode(type, { x, y })
   }
 
-  const handleDragStart = (e: React.DragEvent, type: "delay" | "reverb" | "compressor" | "filter" | "visualizer" | "eq") => {
+  const handleDragStart = (e: React.DragEvent, type: import("./audio-node-provider").NodeType) => {
     e.dataTransfer.setData("nodeType", type)
     // Create a ghost image for dragging
     const ghostElement = document.createElement("div")
@@ -33,6 +33,8 @@ export function Sidebar() {
   }
 
   const nodeTypes = [
+    { type: "oscillator", icon: Clock, label: "Oscillator" },
+    { type: "mp3input", icon: Waves, label: "MP3 Input" },
     { type: "delay", icon: Clock, label: "Delay" },
     { type: "reverb", icon: Waves, label: "Reverb" },
     { type: "compressor", icon: Activity, label: "Compressor" },

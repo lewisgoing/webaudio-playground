@@ -1,0 +1,33 @@
+# Web Audio Node Editor Websurf Rules
+
+## Project Structure
+- `/app`: Next.js application routing and pages
+- `/components`: React components organized by function
+- `/lib`: Utility functions and tools
+- `/public`: Static assets like images and SVGs
+- `/styles`: Global CSS styles
+
+## Core Components
+- `AudioNodeProvider`: Context provider for audio node management and connections
+- `NodeEditor`: Main canvas where nodes are placed and connected
+- `ControlPanel`: Parameter controls for selected nodes
+- `Sidebar`: Node selection and application controls
+
+## Key Concepts
+- Audio nodes (source, destination, effects) are connected to create processing chains
+- Nodes have inputs, outputs, and adjustable parameters
+- Connections between nodes are visualized with SVG paths
+- Context menu allows adding nodes and other operations
+
+## Development Notes
+- UI components use shadcn/ui design system based on Radix UI
+- Dark/light mode supported via CSS variables
+- Node parameters automatically update based on node type
+- Drag and drop functionality for node placement
+- Right-click context menu support
+
+## Common Tasks
+- Add new node types in the AudioNodeProvider
+- Update parameter controls in ControlPanel component
+- Modify node visualization in AudioNodeComponent
+- Change connection styling in NodeEditor component

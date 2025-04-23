@@ -26,6 +26,10 @@ export function AudioNodeComponent({
         return <Mic className="h-5 w-5" />
       case "destination":
         return <Speaker className="h-5 w-5" />
+      case "oscillator":
+        return <Clock className="h-5 w-5" />
+      case "mp3input":
+        return <Waves className="h-5 w-5" />
       case "delay":
         return <Clock className="h-5 w-5" />
       case "reverb":
@@ -72,6 +76,10 @@ export function AudioNodeComponent({
         return "Audio Source"
       case "destination":
         return "Output"
+      case "oscillator":
+        return "Oscillator"
+      case "mp3input":
+        return "MP3 Input"
       case "delay":
         return "Delay"
       case "reverb":
@@ -115,8 +123,16 @@ export function AudioNodeComponent({
             {node.inputs.map((input) => (
               <div key={input} className="relative">
                 <div
-                  className="absolute -left-3 top-1/2 -translate-y-1/2 h-4 w-4 rounded-full bg-indigo-500 cursor-pointer"
-                  onClick={(e) => onEndConnecting(node.id, input, e)}
+                  className="absolute -left-3 top-1/2 -translate-y-1/2 h-4 w-4 rounded-full bg-indigo-500 cursor-pointer hover:ring-2 hover:ring-white"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onEndConnecting(node.id, input, e);
+                  }}
+                  onMouseDown={(e) => {
+                    // Prevent node dragging when clicking on connector
+                    e.stopPropagation();
+                  }}
                   role="button"
                   tabIndex={0}
                   aria-label={`${getNodeTitle()} input connector`}
@@ -124,6 +140,36 @@ export function AudioNodeComponent({
                 <span className="text-xs ml-2">Input</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Oscillator node controls */}
+        {node.type === "oscillator" && (
+          <div className="mb-2 space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span>Type:</span>
+              <span>{["Sine","Square","Sawtooth","Triangle"][node.params.type || 0]}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span>Freq:</span>
+              <span>{node.params.frequency} Hz</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span>Gain:</span>
+              <span>{node.params.gain}</span>
+            </div>
+          </div>
+        )}
+
+        {/* MP3 Input node file upload */}
+        {node.type === "mp3input" && (
+          <div className="mb-2">
+            <label className="block text-xs mb-1">Upload MP3:</label>
+            <input type="file" accept="audio/mp3,audio/mpeg" className="block w-full text-xs" />
+            <div className="flex items-center justify-between text-xs mt-1">
+              <span>Gain:</span>
+              <span>{node.params.gain}</span>
+            </div>
           </div>
         )}
 
@@ -141,8 +187,16 @@ export function AudioNodeComponent({
               <div key={output} className="relative">
                 <span className="text-xs mr-2">Output</span>
                 <div
-                  className="absolute -right-3 top-1/2 -translate-y-1/2 h-4 w-4 rounded-full bg-indigo-500 cursor-pointer"
-                  onClick={(e) => onStartConnecting(node.id, output, e)}
+                  className="absolute -right-3 top-1/2 -translate-y-1/2 h-4 w-4 rounded-full bg-indigo-500 cursor-pointer hover:ring-2 hover:ring-white"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onStartConnecting(node.id, output, e);
+                  }}
+                  onMouseDown={(e) => {
+                    // Prevent node dragging when clicking on connector
+                    e.stopPropagation();
+                  }}
                   role="button"
                   tabIndex={0}
                   aria-label={`${getNodeTitle()} output connector`}

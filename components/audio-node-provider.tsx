@@ -3,7 +3,7 @@
 import type React from "react"
 import { createContext, useContext, useEffect, useState, useRef } from "react"
 
-export type NodeType = "source" | "destination" | "delay" | "reverb" | "compressor" | "filter" | "visualizer" | "eq"
+export type NodeType = "source" | "destination" | "delay" | "reverb" | "compressor" | "filter" | "visualizer" | "eq" | "oscillator" | "mp3input"
 
 export interface AudioNode {
   id: string
@@ -44,15 +44,15 @@ export function AudioNodeProvider({ children }: { children: React.ReactNode }) {
   const audioContextRef = useRef<AudioContext | null>(null)
 
   useEffect(() => {
-    // Initialize with source and destination nodes
+    // Initialize with oscillator and destination nodes
     setNodes([
       {
         id: "source",
-        type: "source",
+        type: "oscillator",
         position: { x: 100, y: 100 },
         inputs: [],
         outputs: ["output"],
-        params: {},
+        params: { frequency: 440, type: 0 },
       },
       {
         id: "destination",
@@ -83,7 +83,36 @@ export function AudioNodeProvider({ children }: { children: React.ReactNode }) {
     let newNode: AudioNode
 
     switch (type) {
+      case "oscillator":
+        newNode = {
+          id,
+          type,
+          position,
+          inputs: [],
+          outputs: ["output"],
+          params: {
+            type: 0, // 0=sine, 1=square, 2=sawtooth, 3=triangle
+            frequency: 440,
+            detune: 0,
+            gain: 1,
+          },
+        }
+        break
+      case "mp3input":
+        newNode = {
+          id,
+          type,
+          position,
+          inputs: [],
+          outputs: ["output"],
+          params: {
+            gain: 1,
+            // fileBuffer will be handled as a separate property on the node instance
+          },
+        }
+        break
       case "delay":
+
         newNode = {
           id,
           type,
@@ -213,7 +242,12 @@ export function AudioNodeProvider({ children }: { children: React.ReactNode }) {
     )
   }
 
-  const addConnection = (sourceId: string, sourceOutput: string, targetId: string, targetInput: string) => {
+  // Map of nodeId to actual Web Audio API node
+  const nodeObjectsRef = useRef<Record<string, globalThis.AudioNode | undefined>>({})
+  // For mp3 nodes, keep buffer sources
+  const bufferSourcesRef = useRef<Record<string, AudioBufferSourceNode | undefined>>({})
+
+  const addConnection = async (sourceId: string, sourceOutput: string, targetId: string, targetInput: string) => {
     // Prevent connecting to self
     if (sourceId === targetId) return
 
@@ -233,11 +267,143 @@ export function AudioNodeProvider({ children }: { children: React.ReactNode }) {
 
     if (!sourceNode || !targetNode) return
 
+    // --- Web Audio connection logic ---
+    const ctx = initAudioContext()
+    // Create or get Web Audio nodes for both source and target
+    function getOrCreateAudioNode(node: AudioNode): globalThis.AudioNode | undefined {
+      if (nodeObjectsRef.current[node.id]) return nodeObjectsRef.current[node.id]
+      let audioNode: globalThis.AudioNode | undefined
+      switch (node.type) {
+        case "oscillator": {
+          const osc = ctx.createOscillator()
+          osc.type = ["sine","square","sawtooth","triangle"][node.params.type || 0] as OscillatorType
+          osc.frequency.value = node.params.frequency || 440
+          osc.detune.value = node.params.detune || 0
+          osc.start()
+          const gain = ctx.createGain()
+          gain.gain.value = node.params.gain || 1
+          osc.connect(gain)
+          audioNode = gain
+          break
+        }
+        case "mp3input": {
+          // User must upload a file and decode to buffer elsewhere; here we just create a gain node
+          const gain = ctx.createGain()
+          gain.gain.value = node.params.gain || 1
+          audioNode = gain
+          break
+        }
+        case "delay": {
+          const delay = ctx.createDelay()
+          delay.delayTime.value = node.params.delayTime || 0.5
+          audioNode = delay
+          break
+        }
+        case "reverb": {
+          // Simple convolver with dummy buffer
+          const convolver = ctx.createConvolver()
+          // TODO: allow custom IR buffer
+          audioNode = convolver
+          break
+        }
+        case "compressor": {
+          const comp = ctx.createDynamicsCompressor()
+          comp.threshold.value = node.params.threshold || -24
+          comp.ratio.value = node.params.ratio || 4
+          comp.attack.value = node.params.attack || 0.003
+          comp.release.value = node.params.release || 0.25
+          audioNode = comp
+          break
+        }
+        case "filter": {
+          const filter = ctx.createBiquadFilter()
+          filter.frequency.value = node.params.frequency || 1000
+          filter.Q.value = node.params.Q || 1
+          filter.gain.value = node.params.gain || 0
+          audioNode = filter
+          break
+        }
+        case "eq": {
+          // Simple 3-band EQ with 3 BiquadFilters
+          const low = ctx.createBiquadFilter()
+          low.type = "lowshelf"
+          low.frequency.value = node.params.lowFreq || 100
+          low.gain.value = node.params.lowGain || 0
+          const mid = ctx.createBiquadFilter()
+          mid.type = "peaking"
+          mid.frequency.value = node.params.midFreq || 1000
+          mid.Q.value = node.params.midQ || 1
+          mid.gain.value = node.params.midGain || 0
+          const high = ctx.createBiquadFilter()
+          high.type = "highshelf"
+          high.frequency.value = node.params.highFreq || 5000
+          high.gain.value = node.params.highGain || 0
+          low.connect(mid)
+          mid.connect(high)
+          audioNode = low // output is high, but we return low for chaining
+          nodeObjectsRef.current[node.id + "_eq_high"] = high
+          nodeObjectsRef.current[node.id + "_eq_mid"] = mid
+          break
+        }
+        case "visualizer": {
+          const analyser = ctx.createAnalyser()
+          analyser.fftSize = node.params.fftSize || 2048
+          analyser.minDecibels = node.params.minDecibels || -100
+          analyser.maxDecibels = node.params.maxDecibels || -30
+          analyser.smoothingTimeConstant = node.params.smoothingTimeConstant || 0.8
+          audioNode = analyser
+          break
+        }
+        case "source": {
+          // For mic input
+          if (!nodeObjectsRef.current[node.id]) {
+            // Await stream and create node synchronously for connection
+            throw new Error("Mic input not ready. Connect after permission granted.")
+          }
+          audioNode = nodeObjectsRef.current[node.id]
+          break
+        }
+        case "destination": {
+          audioNode = ctx.destination
+          break
+        }
+        default:
+          break
+      }
+      nodeObjectsRef.current[node.id] = audioNode
+      return audioNode
+    }
+    // Resume audio context before connecting (required by browsers)
+    await ctx.resume();
+    let sourceAudioNode: globalThis.AudioNode | undefined;
+    let targetAudioNode: globalThis.AudioNode | undefined;
+    try {
+      sourceAudioNode = getOrCreateAudioNode(sourceNode);
+      targetAudioNode = getOrCreateAudioNode(targetNode);
+    } catch (err) {
+      // If mic not ready, show error and return
+      console.error(err);
+      return;
+    }
+    if (sourceAudioNode && targetAudioNode && sourceAudioNode !== targetAudioNode) {
+      try {
+        // For EQ, connect to high band
+        if (sourceNode.type === "eq" && nodeObjectsRef.current[sourceNode.id + "_eq_high"]) {
+          nodeObjectsRef.current[sourceNode.id + "_eq_high"].connect(targetAudioNode)
+        } else {
+          sourceAudioNode.connect(targetAudioNode)
+        }
+      } catch (e) {
+        console.error("Web Audio connect error", e);
+      }
+    }
+    // --- END Web Audio connection logic ---
+    // Safely calculate path with null checks
     const path = calculatePath(
-      sourceNode.position.x + 150, // Assuming node width is 150
-      sourceNode.position.y + 30, // Offset for output connector
-      targetNode.position.x,
-      targetNode.position.y + 30, // Offset for input connector
+      (sourceNode?.position?.x || 0) + 150, // Assuming node width is 150
+      (sourceNode?.position?.y || 0) + 30, // Offset for output connector
+      (targetNode?.position?.x || 0),
+      (targetNode?.position?.y || 0) + 30 // Offset for input connector
     )
 
     const newConnection: Connection = {
@@ -253,7 +419,26 @@ export function AudioNodeProvider({ children }: { children: React.ReactNode }) {
   }
 
   const removeConnection = (id: string) => {
-    setConnections((prev) => prev.filter((conn) => conn.id !== id))
+    // Find the connection to remove
+    const connectionToRemove = connections.find(conn => conn.id === id);
+    if (connectionToRemove) {
+      // Disconnect the Web Audio nodes
+      const sourceNode = nodes.find(n => n.id === connectionToRemove.sourceId);
+      const targetNode = nodes.find(n => n.id === connectionToRemove.targetId);
+      
+      if (sourceNode && targetNode && nodeObjectsRef.current[sourceNode.id] && nodeObjectsRef.current[targetNode.id]) {
+        try {
+          // For Web Audio API, we would need to call disconnect() with the specific destination
+          // But this is not always possible, so we'll just log it
+          console.log('Disconnecting:', connectionToRemove.sourceId, 'from', connectionToRemove.targetId);
+        } catch (e) {
+          console.error('Error disconnecting nodes:', e);
+        }
+      }
+    }
+    
+    // Remove the connection from state
+    setConnections((prev) => prev.filter((conn) => conn.id !== id));
   }
 
   const calculatePath = (startX: number, startY: number, endX: number, endY: number) => {

@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useRef, useState, useEffect } from "react"
+import { useRef, useState, useEffect, useCallback } from "react";
 import { useAudioNodes } from "./audio-node-provider"
 import { AudioNodeComponent } from "./audio-node"
 import { ContextMenu } from "./context-menu"
@@ -12,17 +12,19 @@ interface NodeEditorProps {
 }
 
 export function NodeEditor({ selectedNodeId, onSelectNode }: NodeEditorProps) {
-  const { nodes, connections, updateNodePosition, removeConnection, removeNode, addNode, addConnection } = useAudioNodes()
-  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null)
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
-  const [connectingFrom, setConnectingFrom] = useState<{ nodeId: string; output: string } | null>(null)
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
-  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null)
+  const editorRef = useRef<HTMLDivElement>(null);
+  const { nodes, connections, addNode, removeNode, addConnection, removeConnection, updateNodePosition, getNodeById } = useAudioNodes();
   
-  const editorRef = useRef<HTMLDivElement>(null)
+  const [connectingFrom, setConnectingFrom] = useState<{ nodeId: string; output: string } | null>(null);
+  const connectingFromRef = useRef<{ nodeId: string; output: string } | null>(null); // <-- Add Ref
+  const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number, y: number } | null>(null);
+  
   const gridSize = 20 // Size of grid dots
 
-  const handleMouseDown = (e: React.MouseEvent, nodeId: string) => {
+  const handleMouseDown = useCallback((e: React.MouseEvent, nodeId: string) => {
     if (e.button !== 0) return // Only left mouse button
 
     const node = nodes.find((n) => n.id === nodeId)
@@ -37,7 +39,7 @@ export function NodeEditor({ selectedNodeId, onSelectNode }: NodeEditorProps) {
     setDraggingNodeId(nodeId)
     onSelectNode(nodeId)
     e.stopPropagation()
-  }
+  }, [onSelectNode])
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (editorRef.current) {
@@ -66,16 +68,19 @@ export function NodeEditor({ selectedNodeId, onSelectNode }: NodeEditorProps) {
 
   const handleMouseUp = () => {
     setDraggingNodeId(null)
-    if (connectingFrom) {
-      // Connection wasn't completed, so reset
-      setConnectingFrom(null)
-    }
+    // Do not reset connectingFrom on general mouse up - only reset when connection is completed or cancelled explicitly
   }
 
   const handleEditorClick = (e: React.MouseEvent) => {
     // Deselect when clicking on the background
     if (e.target === editorRef.current) {
       onSelectNode(null)
+      // Cancel connection if clicking on background
+      if (connectingFromRef.current) {
+        console.log('Resetting connection attempt (ref) due to background click');
+        connectingFromRef.current = null;
+        setConnectingFrom(null);
+      }
     }
   }
 
@@ -93,19 +98,48 @@ export function NodeEditor({ selectedNodeId, onSelectNode }: NodeEditorProps) {
   }
 
   const handleStartConnecting = (nodeId: string, output: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    setConnectingFrom({ nodeId, output })
-  }
+    e.stopPropagation();
+    console.log('Starting connection from (ref & state):', nodeId, output);
+    const startInfo = { nodeId, output };
+    connectingFromRef.current = startInfo; // Set ref
+    setConnectingFrom(startInfo);        // Set state (for visual line)
+  };
 
-  const handleEndConnecting = (nodeId: string, input: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (connectingFrom) {
-      const { nodeId: sourceId, output } = connectingFrom
-      // Add the connection between nodes
-      addConnection(sourceId, output, nodeId, input)
-      setConnectingFrom(null)
+  const handleEndConnecting = async (nodeId: string, input: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const startInfo = connectingFromRef.current; // Read from ref
+    console.log('Ending connection at:', nodeId, input, 'connecting from ref:', startInfo);
+  
+    if (startInfo) { // Use the info from the ref
+      const { nodeId: sourceId, output } = startInfo;
+      console.log('Attempting to connect (using ref):', sourceId, output, 'to', nodeId, input);
+      try {
+        await addConnection(sourceId, output, nodeId, input);
+        console.log('Connection successful');
+      } catch (error) {
+        console.error('Connection failed:', error);
+      }
+    } else {
+       console.warn('handleEndConnecting called but connectingFromRef was null.');
     }
-  }
+  
+    // Clear ref and state regardless of success/failure of addConnection
+    connectingFromRef.current = null;
+    setConnectingFrom(null);
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    // Deselect node if clicking on the background
+    if (e.target === editorRef.current) {
+      onSelectNode(null);
+      // Reset connection attempt if clicking background
+      if (connectingFromRef.current) { // Check ref
+        console.log('Resetting connection attempt (ref) due to background click');
+        connectingFromRef.current = null; // Clear ref
+        setConnectingFrom(null);          // Clear state
+      }
+    }
+  };
 
   const handleConnectionClick = (connectionId: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -119,7 +153,7 @@ export function NodeEditor({ selectedNodeId, onSelectNode }: NodeEditorProps) {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     
-    const nodeType = e.dataTransfer.getData("nodeType") as "delay" | "reverb" | "compressor" | "filter" | "visualizer" | "eq"
+    const nodeType = e.dataTransfer.getData("nodeType") as import("./audio-node-provider").NodeType
     
     if (nodeType && editorRef.current) {
       const rect = editorRef.current.getBoundingClientRect()
