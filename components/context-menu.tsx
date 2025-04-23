@@ -22,6 +22,9 @@ import { cn } from "@/lib/utils"
 interface ContextMenuProps {
   position: { x: number; y: number } | null
   onClose: () => void
+  selectedNodeIds?: string[]
+  lastClickedNodeId?: string | null
+  onDelete?: () => void
 }
 
 type MenuItem = {
@@ -31,7 +34,7 @@ type MenuItem = {
   submenu?: MenuItem[]
 }
 
-export function ContextMenu({ position, onClose }: ContextMenuProps) {
+export function ContextMenu({ position, onClose, selectedNodeIds = [], lastClickedNodeId, onDelete }: ContextMenuProps) {
   const { addNode } = useAudioNodes()
   const menuRef = useRef<HTMLDivElement>(null)
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null)
@@ -64,6 +67,16 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
         action: () => handleAddNode(type)
       }))
     },
+    // Only show Delete if node(s) selected
+    ...(selectedNodeIds && selectedNodeIds.length > 0 ? [{
+      label: "Delete",
+      icon: <Trash2 className="h-4 w-4" />,
+      action: () => {
+        if (onDelete) onDelete();
+        onClose();
+      }
+    }] : []),
+    // Additional menu items
     {
       label: "Cut",
       icon: <Scissors className="h-4 w-4" />,
@@ -77,14 +90,6 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
       icon: <Copy className="h-4 w-4" />,
       action: () => {
         console.log("Copy action");
-        onClose();
-      }
-    },
-    {
-      label: "Delete",
-      icon: <Trash2 className="h-4 w-4" />,
-      action: () => {
-        console.log("Delete action");
         onClose();
       }
     },

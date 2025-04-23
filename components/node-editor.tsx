@@ -7,74 +7,93 @@ import { AudioNodeComponent } from "./audio-node"
 import { ContextMenu } from "./context-menu"
 
 interface NodeEditorProps {
-  selectedNodeId: string | null
-  onSelectNode: (id: string | null) => void
+  selectedNodeIds: string[]
+  onSelectNode: (ids: string[]) => void
 }
 
-export function NodeEditor({ selectedNodeId, onSelectNode }: NodeEditorProps) {
+export function NodeEditor({ selectedNodeIds = [], onSelectNode }: NodeEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const { nodes, connections, addNode, removeNode, addConnection, removeConnection, updateNodePosition, getNodeById } = useAudioNodes();
   
   const [connectingFrom, setConnectingFrom] = useState<{ nodeId: string; output: string } | null>(null);
-  const connectingFromRef = useRef<{ nodeId: string; output: string } | null>(null); // <-- Add Ref
+  const connectingFromRef = useRef<{ nodeId: string; output: string } | null>(null);
   const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number, y: number } | null>(null);
-  
+  const [marquee, setMarquee] = useState<{start: {x: number, y: number}, end: {x: number, y: number}}|null>(null);
+  const [lastClickedNodeId, setLastClickedNodeId] = useState<string|null>(null);
   const gridSize = 20 // Size of grid dots
 
   const handleMouseDown = useCallback((e: React.MouseEvent, nodeId: string) => {
     if (e.button !== 0) return // Only left mouse button
-
     const node = nodes.find((n) => n.id === nodeId)
     if (!node) return
-
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setDragOffset({
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
     })
-
     setDraggingNodeId(nodeId)
-    onSelectNode(nodeId)
+    // Multi-select logic
+    if (e.shiftKey || e.metaKey || e.ctrlKey) {
+      // Add to selection
+      if (!selectedNodeIds.includes(nodeId)) {
+        onSelectNode([...selectedNodeIds, nodeId])
+        setLastClickedNodeId(nodeId)
+      }
+    } else {
+      onSelectNode([nodeId])
+      setLastClickedNodeId(nodeId)
+    }
     e.stopPropagation()
-  }, [onSelectNode])
+  }, [onSelectNode, selectedNodeIds])
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (editorRef.current) {
       const rect = editorRef.current.getBoundingClientRect()
       const x = e.clientX - rect.left + editorRef.current.scrollLeft
       const y = e.clientY - rect.top + editorRef.current.scrollTop
-      
       setMousePosition({ x, y })
+      if (marquee) {
+        setMarquee({ ...marquee, end: { x, y } })
+      }
     }
-
     if (draggingNodeId) {
       const editorRect = editorRef.current?.getBoundingClientRect()
       if (!editorRect) return
-
-      // Calculate position including scroll offset
       const x = e.clientX - editorRect.left - dragOffset.x + (editorRef.current?.scrollLeft || 0)
       const y = e.clientY - editorRect.top - dragOffset.y + (editorRef.current?.scrollTop || 0)
-
-      // Snap to grid
       const snappedX = Math.round(x / gridSize) * gridSize
       const snappedY = Math.round(y / gridSize) * gridSize
-
       updateNodePosition(draggingNodeId, { x: snappedX, y: snappedY })
     }
   }
 
   const handleMouseUp = () => {
     setDraggingNodeId(null)
-    // Do not reset connectingFrom on general mouse up - only reset when connection is completed or cancelled explicitly
+    // Marquee selection: select all nodes inside rectangle
+    if (marquee && editorRef.current) {
+      const {start, end} = marquee;
+      const minX = Math.min(start.x, end.x);
+      const maxX = Math.max(start.x, end.x);
+      const minY = Math.min(start.y, end.y);
+      const maxY = Math.max(start.y, end.y);
+      const selected = nodes.filter(n => {
+        const {x, y} = n.position;
+        return x >= minX && x <= maxX && y >= minY && y <= maxY;
+      }).map(n => n.id);
+      onSelectNode(selected);
+      setLastClickedNodeId(selected.length > 0 ? selected[selected.length-1] : null);
+      setMarquee(null);
+    }
   }
 
   const handleEditorClick = (e: React.MouseEvent) => {
     // Deselect when clicking on the background
     if (e.target === editorRef.current) {
-      onSelectNode(null)
+      onSelectNode([])
+      setLastClickedNodeId(null)
       // Cancel connection if clicking on background
       if (connectingFromRef.current) {
         console.log('Resetting connection attempt (ref) due to background click');
@@ -86,15 +105,14 @@ export function NodeEditor({ selectedNodeId, onSelectNode }: NodeEditorProps) {
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
-    
     if (editorRef.current) {
       const rect = editorRef.current.getBoundingClientRect()
       const x = e.clientX - rect.left + editorRef.current.scrollLeft
       const y = e.clientY - rect.top + editorRef.current.scrollTop
-      
-      // Set the position for the context menu
       setContextMenuPosition({ x, y })
     }
+    // If right click on node, select it (multi-select aware)
+    // (This will be handled in AudioNodeComponent with onContextMenu)
   }
 
   const handleStartConnecting = (nodeId: string, output: string, e: React.MouseEvent) => {
@@ -170,23 +188,21 @@ export function NodeEditor({ selectedNodeId, onSelectNode }: NodeEditorProps) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Delete" && selectedNodeId) {
-        // Don't allow deleting source or destination
-        if (selectedNodeId !== "source" && selectedNodeId !== "destination") {
-          removeNode(selectedNodeId)
-          onSelectNode(null)
-        }
+      if (e.key === "Delete" && selectedNodeIds.length > 0) {
+        selectedNodeIds.forEach(id => {
+          if (id !== "source" && id !== "destination") removeNode(id)
+        })
+        onSelectNode([])
+        setLastClickedNodeId(null)
       }
-      
       // Close context menu on Escape
       if (e.key === "Escape") {
         setContextMenuPosition(null)
       }
     }
-
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [selectedNodeId, removeNode, onSelectNode])
+  }, [selectedNodeIds, removeNode, onSelectNode])
 
   // Create a grid pattern style
   const gridStyle = {
@@ -208,8 +224,29 @@ export function NodeEditor({ selectedNodeId, onSelectNode }: NodeEditorProps) {
       onContextMenu={handleContextMenu}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
+      onMouseDown={e => {
+        if (e.target === editorRef.current && e.button === 0) {
+          // Start marquee selection
+          const rect = editorRef.current.getBoundingClientRect();
+          const x = e.clientX - rect.left + editorRef.current.scrollLeft;
+          const y = e.clientY - rect.top + editorRef.current.scrollTop;
+          setMarquee({start: {x, y}, end: {x, y}});
+        }
+      }}
     >
       <div className="relative h-[2000px] w-[2000px]" style={gridStyle}>
+        {/* Render selection rectangle */}
+        {marquee && (
+          <div
+            className="absolute border-2 border-indigo-400 bg-indigo-300/10 pointer-events-none z-50"
+            style={{
+              left: Math.min(marquee.start.x, marquee.end.x),
+              top: Math.min(marquee.start.y, marquee.end.y),
+              width: Math.abs(marquee.end.x - marquee.start.x),
+              height: Math.abs(marquee.end.y - marquee.start.y),
+            }}
+          />
+        )}
         {/* Render connection lines */}
         <svg className="absolute inset-0 h-full w-full pointer-events-none">
           {connections.map((connection) => (
@@ -223,7 +260,6 @@ export function NodeEditor({ selectedNodeId, onSelectNode }: NodeEditorProps) {
               onClick={(e) => handleConnectionClick(connection.id, e)}
             />
           ))}
-
           {/* Render in-progress connection */}
           {connectingFrom && (
             <path
@@ -240,23 +276,37 @@ export function NodeEditor({ selectedNodeId, onSelectNode }: NodeEditorProps) {
             />
           )}
         </svg>
-
         {/* Render nodes */}
         {nodes.map((node) => (
           <AudioNodeComponent
             key={node.id}
             node={node}
-            isSelected={node.id === selectedNodeId}
+            isSelected={selectedNodeIds.includes(node.id)}
             onMouseDown={(e) => handleMouseDown(e, node.id)}
             onStartConnecting={handleStartConnecting}
             onEndConnecting={handleEndConnecting}
+            onContextMenu={e => {
+              // Right-click select for multi-select
+              if (!selectedNodeIds.includes(node.id)) {
+                onSelectNode([node.id]);
+                setLastClickedNodeId(node.id);
+              }
+            }}
           />
         ))}
-
         {/* Context Menu */}
         <ContextMenu
           position={contextMenuPosition}
           onClose={() => setContextMenuPosition(null)}
+          selectedNodeIds={selectedNodeIds}
+          lastClickedNodeId={lastClickedNodeId}
+          onDelete={() => {
+            selectedNodeIds.forEach(id => {
+              if (id !== "source" && id !== "destination") removeNode(id)
+            });
+            onSelectNode([])
+            setLastClickedNodeId(null)
+          }}
         />
       </div>
     </div>

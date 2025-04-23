@@ -11,6 +11,7 @@ interface AudioNodeProps {
   onMouseDown: (e: React.MouseEvent) => void
   onStartConnecting: (nodeId: string, output: string, e: React.MouseEvent) => void
   onEndConnecting: (nodeId: string, input: string, e: React.MouseEvent) => void
+  onContextMenu?: (e: React.MouseEvent) => void
 }
 
 export function AudioNodeComponent({
@@ -19,6 +20,7 @@ export function AudioNodeComponent({
   onMouseDown,
   onStartConnecting,
   onEndConnecting,
+  onContextMenu,
 }: AudioNodeProps) {
   const getNodeIcon = () => {
     switch (node.type) {
@@ -105,6 +107,7 @@ export function AudioNodeComponent({
         top: `${node.position.y}px`,
       }}
       onMouseDown={onMouseDown}
+      onContextMenu={onContextMenu}
       aria-selected={isSelected}
       role="button"
       tabIndex={0}
